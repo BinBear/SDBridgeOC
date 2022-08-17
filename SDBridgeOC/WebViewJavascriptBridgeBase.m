@@ -101,7 +101,7 @@
     messageJSON = [messageJSON stringByReplacingOccurrencesOfString:@"\u2029" withString:@"\\u2029"];
     
     NSString* javascriptCommand = [NSString stringWithFormat:@"WebViewJavascriptBridge.handleMessageFromNative('%@');", messageJSON];
-    if ([[NSThread currentThread] isMainThread]) {
+    if (dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL) == dispatch_queue_get_label(dispatch_get_main_queue()))  {
         [self evaluateJavascript:javascriptCommand];
 
     } else {
