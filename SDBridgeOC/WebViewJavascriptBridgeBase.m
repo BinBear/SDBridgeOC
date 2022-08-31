@@ -39,41 +39,42 @@
 }
 
 - (void)flushMessageQueue:(NSString *)messageQueueString{
-    if (messageQueueString == nil || messageQueueString.length == 0) {
-        NSLog(@"WebViewJavascriptBridge: WARNING: ObjC got nil while fetching the message queue JSON from webview. This can happen if the WebViewJavascriptBridge JS is not currently present in the webview, e.g if the webview just loaded a new page.");
+    if (!messageQueueString ||
+        ![messageQueueString isKindOfClass:NSString.class] ||
+        messageQueueString.length == 0) {
         return;
     }
-    WVJBMessage * message = [self deserializeMessageJSON: messageQueueString];
-    if (![message isKindOfClass:[WVJBMessage class]]) {
-        NSLog(@"WebViewJavascriptBridge: WARNING: Invalid %@ received: %@", [message class], message);
-    }
-    NSString* responseId = message[@"responseId"];
-    if (responseId) {
-        WVJBResponseCallback responseCallback = _responseCallbacks[responseId];
-        responseCallback(message[@"responseData"]);
-        [self.responseCallbacks removeObjectForKey:responseId];
-    } else {
-        WVJBResponseCallback responseCallback = NULL;
-        NSString* callbackId = message[@"callbackId"];
-        if (callbackId) {
-            responseCallback = ^(id responseData) {
-                if (responseData == nil) {
-                    responseData = [NSNull null];
-                }
-                WVJBMessage* msg = @{ @"responseId":callbackId, @"responseData":responseData };
-                [self dispatchMessage:msg];
-            };
+    
+    id messages = [self deserializeMessageJSON:messageQueueString];
+    for (WVJBMessage *message in messages) {
+        if (![message isKindOfClass:[WVJBMessage class]]) continue;
+        NSString *responseId = message[@"responseId"];
+        if (responseId) {
+            WVJBResponseCallback responseCallback = _responseCallbacks[responseId];
+            responseCallback(message[@"responseData"]);
+            [self.responseCallbacks removeObjectForKey:responseId];
         } else {
-            responseCallback = ^(id ignoreResponseData) {
-                // Do nothing
-            };
+            WVJBResponseCallback responseCallback = NULL;
+            NSString *callbackId = message[@"callbackId"];
+            if (callbackId) {
+                responseCallback = ^(id responseData) {
+                    if (responseData == nil) {
+                        responseData = [NSNull null];
+                    }
+                    
+                    WVJBMessage *msg = @{ @"responseId":callbackId, @"responseData":responseData };
+                    [self dispatchMessage:msg];
+                };
+            } else {
+                responseCallback = ^(id ignoreResponseData) {
+                    // Do nothing
+                };
+            }
+            
+            WVJBHandler handler = self.messageHandlers[message[@"handlerName"]];
+
+            !handler ?: handler(message[@"data"], responseCallback);
         }
-        WVJBHandler handler = self.messageHandlers[message[@"handlerName"]];
-        
-        if (!handler) {
-            NSLog(@"WVJBNoHandlerException, No handler for message from JS: %@", message);
-        }
-        handler(message[@"data"], responseCallback);
     }
 }
 
