@@ -45,36 +45,35 @@
         return;
     }
     
-    id messages = [self deserializeMessageJSON:messageQueueString];
-    for (WVJBMessage *message in messages) {
-        if (![message isKindOfClass:[WVJBMessage class]]) continue;
-        NSString *responseId = message[@"responseId"];
-        if (responseId) {
-            WVJBResponseCallback responseCallback = _responseCallbacks[responseId];
-            responseCallback(message[@"responseData"]);
-            [self.responseCallbacks removeObjectForKey:responseId];
+    id message = [self deserializeMessageJSON:messageQueueString];
+    if (![message isKindOfClass:[WVJBMessage class]]) return;
+    
+    NSString *responseId = message[@"responseId"];
+    if (responseId) {
+        WVJBResponseCallback responseCallback = _responseCallbacks[responseId];
+        responseCallback(message[@"responseData"]);
+        [self.responseCallbacks removeObjectForKey:responseId];
+    } else {
+        WVJBResponseCallback responseCallback = NULL;
+        NSString *callbackId = message[@"callbackId"];
+        if (callbackId) {
+            responseCallback = ^(id responseData) {
+                if (responseData == nil) {
+                    responseData = [NSNull null];
+                }
+                
+                WVJBMessage *msg = @{ @"responseId":callbackId, @"responseData":responseData };
+                [self dispatchMessage:msg];
+            };
         } else {
-            WVJBResponseCallback responseCallback = NULL;
-            NSString *callbackId = message[@"callbackId"];
-            if (callbackId) {
-                responseCallback = ^(id responseData) {
-                    if (responseData == nil) {
-                        responseData = [NSNull null];
-                    }
-                    
-                    WVJBMessage *msg = @{ @"responseId":callbackId, @"responseData":responseData };
-                    [self dispatchMessage:msg];
-                };
-            } else {
-                responseCallback = ^(id ignoreResponseData) {
-                    // Do nothing
-                };
-            }
-            
-            WVJBHandler handler = self.messageHandlers[message[@"handlerName"]];
-
-            !handler ?: handler(message[@"data"], responseCallback);
+            responseCallback = ^(id ignoreResponseData) {
+                // Do nothing
+            };
         }
+        
+        WVJBHandler handler = self.messageHandlers[message[@"handlerName"]];
+
+        !handler ?: handler(message[@"data"], responseCallback);
     }
 }
 
